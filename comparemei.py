@@ -9,7 +9,7 @@ def normalize_name(name):
     Normaliza o texto para melhorar a comparação:
     - Remove acentos e caracteres especiais.
     - Converte para letras minúsculas.
-    - Remove espaços extras.
+    - Remove espaços extras e quebras de linha.
     - Remove caracteres não alfabéticos (opcional, dependendo do caso de uso).
     
     Args:
@@ -18,11 +18,14 @@ def normalize_name(name):
     Returns:
         str: Nome normalizado.
     """
+    # Remove quebras de linha primeiro
+    name = name.replace('\n', ' ').replace('\r', '')
+    
     # Remove acentos e caracteres especiais
     name = unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('utf-8')
     # Converte para letras minúsculas
     name = name.lower()
-    # Remove espaços extras
+    # Remove espaços extras e normaliza espaços
     name = re.sub(r'\s+', ' ', name).strip()
     # Remove caracteres não alfabéticos (opcional)
     name = re.sub(r'[^a-z\s]', '', name)
@@ -42,12 +45,12 @@ def compare_similar_names(file_path_a, file_path_b, similarity_threshold=85):
     """
     print("Início da comparação:", datetime.now())
     
-    # Lendo os arquivos com codificação UTF-8
+    # Lendo os arquivos com codificação UTF-8 e removendo quebras de linha
     with open(file_path_a, 'r', encoding='utf-8') as file_a:
-        names_a = file_a.read().splitlines()
+        names_a = [line.strip() for line in file_a if line.strip()]
     
     with open(file_path_b, 'r', encoding='utf-8') as file_b:
-        names_b = file_b.read().splitlines()
+        names_b = [line.strip() for line in file_b if line.strip()]
     
     # Normalizando os nomes
     names_a = [normalize_name(name) for name in names_a]
@@ -85,8 +88,13 @@ def save_similar_names_to_excel(similar_names, output_file):
     # Criando um DataFrame com os dados
     df = pd.DataFrame(similar_names, columns=['Nome Lista A', 'Nome Lista B', 'Similaridade (%)'])
     
+    # Configurando o pandas para não quebrar linhas
+    pd.set_option('display.max_colwidth', None)
+    
     # Salvando o DataFrame em um arquivo Excel
-    df.to_excel(output_file, index=False)
+    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False)
+    
     print(f"Nomes semelhantes salvos em '{output_file}'")
 
 if __name__ == "__main__":
