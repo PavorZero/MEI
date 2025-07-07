@@ -1,3 +1,4 @@
+#criado por PavorZero
 import unicodedata
 import pandas as pd
 
