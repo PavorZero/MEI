@@ -1,3 +1,4 @@
+#criado por PavorZero
 from datetime import datetime
 import unicodedata
 import re
