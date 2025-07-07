@@ -1,3 +1,4 @@
 # Scripts
-Este repositório contém quatro scripts em Python: comparação de nomes iguais (comparemei.py), comparação de nomes distintos(distinctmei.py), normalização de texto (normalizar.py) e o último para remover quebras de linha, tabulações e espaços desnecessários (limpol.py). Os resultados são exportados para um arquivo Excel para facilitar a análise.
+This repository contains four Python scripts: equal name comparison (comparemei.py), distinct name comparison (distinctmei.py), text normalization (normalize.py) and the last one to remove unnecessary line breaks, tabs and spaces (limpol.py). The results are exported to an Excel file for easy analysis.
+
 
