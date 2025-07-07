@@ -1,3 +1,4 @@
+#criado por PavorZero
 from datetime import datetime
 from rapidfuzz import fuzz, process
 import unicodedata
