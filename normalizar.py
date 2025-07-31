@@ -1,20 +1,32 @@
-#criado por PavorZero
 import unicodedata
 import pandas as pd
+import re
 
-def normalizar_nome(nome):
+def normalize_name(name):
     """
-    Normaliza um nome removendo acentos, caracteres especiais e convertendo para minúsculas.
+    Normaliza o texto para melhorar a comparação:
+    - Remove acentos, mantendo letras (é -> e, ã -> a).
+    - Converte para minúsculas.
+    - Remove caracteres não alfabéticos.
+    - Remove espaços extras, tabs e quebras de linha.
     """
-    # Normaliza para a forma NFKD que separa caracteres e seus acentos
-    nome_normalizado = unicodedata.normalize('NFKD', nome)
-    # Remove os caracteres de acentuação e outros diacríticos
-    nome_sem_acentos = ''.join([c for c in nome_normalizado if not unicodedata.combining(c)])
-    # Substitui ç por c
-    nome_sem_cedilha = nome_sem_acentos.replace('ç', 'c').replace('Ç', 'c')
+    # Substitui quebras de linha e tabs por espaço
+    name = name.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+    
+    # Remove acentuação, mantendo os caracteres base (ex: é -> e)
+    name = unicodedata.normalize('NFKD', name)
+    name = ''.join(c for c in name if not unicodedata.combining(c))
+    
     # Converte para minúsculas
-    nome_minusculo = nome_sem_cedilha.lower()
-    return nome_minusculo
+    name = name.lower()
+
+    # Remove múltiplos espaços e trim
+    name = re.sub(r'\s+', ' ', name).strip()
+    
+    # Remove qualquer caractere que não seja letra ou espaço (opcional)
+    # name = re.sub(r'[^a-z\s]', '', name)
+
+    return name
 
 def processar_lista_nomes(arquivo_entrada, arquivo_saida):
     """
@@ -26,7 +38,7 @@ def processar_lista_nomes(arquivo_entrada, arquivo_saida):
             nomes = [linha.strip() for linha in f.readlines()]
         
         # Normaliza cada nome
-        nomes_normalizados = [normalizar_nome(nome) for nome in nomes]
+        nomes_normalizados = [normalize_name(nome) for nome in nomes]
         
         # Cria um DataFrame pandas
         df = pd.DataFrame({
