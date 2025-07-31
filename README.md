@@ -4,8 +4,8 @@ This document describes Python scripts included in a repository aimed at cleanin
 📁 Contents
 
 - limpol.py: Cleans Excel spreadsheets, removing line breaks, tabs, and duplicate spaces.
-- normalizar.py: Normalizes names in text lists (.txt) and exports to Excel.
-- buscador de genero.py: Estimates gender based on first name (suffix pattern analysis).
+- normalize.py: Normalizes names in text lists (.txt) and exports to Excel.
+- genders.py: Estimates gender based on first name (suffix pattern analysis).
 - comparemei.py: Compares lists to identify matching names.
 - distintctmei.py: Compares lists to identify different or missing names.
 
