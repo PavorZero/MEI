@@ -1,110 +1,192 @@
-#criado por PavorZero
 from datetime import datetime
 from rapidfuzz import fuzz, process
 import unicodedata
 import re
 import pandas as pd
+from collections import defaultdict
+from itertools import combinations
+import string
+from openpyxl.utils import get_column_letter
 
-def normalize_name(name):
-    """
-    Normaliza o texto para melhorar a comparação:
-    - Remove acentos e caracteres especiais.
-    - Converte para letras minúsculas.
-    - Remove espaços extras e quebras de linha.
-    - Remove caracteres não alfabéticos (opcional, dependendo do caso de uso).
+def normalize_text(name):
+    """Normalização completa do texto antes da comparação"""
+    if not isinstance(name, str):
+        name = str(name)
     
-    Args:
-        name (str): Nome a ser normalizado.
-    
-    Returns:
-        str: Nome normalizado.
-    """
-    # Remove quebras de linha primeiro
-    name = name.replace('\n', ' ').replace('\r', '')
-    
-    # Remove acentos e caracteres especiais
-    name = unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('utf-8')
-    # Converte para letras minúsculas
+    name = re.sub(r'[\n\r\t]', ' ', name)
+    name = unicodedata.normalize('NFKD', name)
+    name = ''.join(c for c in name if not unicodedata.combining(c))
     name = name.lower()
-    # Remove espaços extras e normaliza espaços
+    name = re.sub(r'[^a-z0-9\s]', '', name)
     name = re.sub(r'\s+', ' ', name).strip()
-    # Remove caracteres não alfabéticos (opcional)
-    name = re.sub(r'[^a-z\s]', '', name)
+    name = name.translate(str.maketrans('', '', string.punctuation))
     return name
 
-def compare_similar_names(file_path_a, file_path_b, similarity_threshold=85):
-    """
-    Compara nomes de dois arquivos de texto, identificando nomes semelhantes com base em uma pontuação de similaridade.
-    
-    Args:
-        file_path_a (str): Caminho para o primeiro arquivo de nomes.
-        file_path_b (str): Caminho para o segundo arquivo de nomes.
-        similarity_threshold (int): Pontuação mínima de similaridade (0-100) para considerar dois nomes como iguais.
-    
-    Returns:
-        list: Lista de pares de nomes semelhantes.
-    """
-    print("Início da comparação:", datetime.now())
-    
-    # Lendo os arquivos com codificação UTF-8 e removendo quebras de linha
-    with open(file_path_a, 'r', encoding='utf-8') as file_a:
-        names_a = [line.strip() for line in file_a if line.strip()]
-    
-    with open(file_path_b, 'r', encoding='utf-8') as file_b:
-        names_b = [line.strip() for line in file_b if line.strip()]
-    
-    # Normalizando os nomes
-    names_a = [normalize_name(name) for name in names_a]
-    names_b = [normalize_name(name) for name in names_b]
-    
-    # Lista para armazenar os pares de nomes semelhantes
-    similar_names = []
-    
-    # Comparando cada nome da lista A com os nomes da lista B
-    for i, name_a in enumerate(names_a):
-        # Encontrar o nome mais semelhante na lista B
-        match, score, _ = process.extractOne(name_a, names_b, scorer=fuzz.ratio)
-        
-        # Verificar se a similaridade está acima do limiar
-        if score >= similarity_threshold:
-            similar_names.append((name_a, match, score))
-        
-        # Exibir progresso a cada 100 iterações
-        if (i + 1) % 100 == 0:
-            print(f"Progresso: {i + 1}/{len(names_a)} nomes processados - {datetime.now()}")
-    
-    print("Quantidade de nomes semelhantes encontrados:", len(similar_names))
-    print("Fim da comparação:", datetime.now())
-    
-    return similar_names
+def extract_first_last_name(name):
+    """Extrai primeiro e último nome de uma string normalizada"""
+    parts = name.split()
+    if not parts:
+        return '', ''
+    first = parts[0]
+    last = parts[-1] if len(parts) > 1 else ''
+    return first, last
 
-def save_similar_names_to_excel(similar_names, output_file):
-    """
-    Salva os pares de nomes semelhantes em um arquivo Excel.
+def clean_final_string(s):
+    return str(s).replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').strip()
+
+def load_names(file_paths):
+    names_dict = {}
+    for key, path in file_paths.items():
+        with open(path, 'r', encoding='utf-8') as file:
+            lines = [line.strip() for line in file if line.strip()]
+            names_dict[key] = {
+                'original': lines,
+                'normalized': [normalize_text(name) for name in lines],
+                'first_last': [extract_first_last_name(normalize_text(name)) for name in lines]
+            }
+    return names_dict
+
+def compare_names(name1, name2, similarity_threshold):
+    """Compara nomes usando primeiro+último nome OU similaridade fuzzy"""
+    first1, last1 = name1
+    first2, last2 = name2
     
-    Args:
-        similar_names (list): Lista de pares de nomes semelhantes.
-        output_file (str): Caminho para o arquivo de saída.
-    """
-    # Criando um DataFrame com os dados
-    df = pd.DataFrame(similar_names, columns=['Nome Lista A', 'Nome Lista B', 'Similaridade (%)'])
+    # Se primeiro E último nome forem iguais, considera match perfeito
+    if first1 == first2 and last1 == last2 and first1 and last1:
+        return 100  # Match perfeito
     
-    # Configurando o pandas para não quebrar linhas
-    pd.set_option('display.max_colwidth', None)
+    # Caso contrário, usa similaridade fuzzy
+    full_name1 = f"{first1} {last1}" if last1 else first1
+    full_name2 = f"{first2} {last2}" if last2 else first2
+    return fuzz.ratio(full_name1, full_name2)
+
+def find_flexible_matches(names_dict, selected_lists, similarity_threshold=85, min_matches=2):
+    print(f"\nIniciando comparação... {datetime.now()}")
     
-    # Salvando o DataFrame em um arquivo Excel
+    results = defaultdict(lambda: {'lists': [], 'matches': {}, 'scores': {}})
+    total_comparisons = len(list(combinations(selected_lists, 2)))
+    current_comparison = 0
+    
+    for list1, list2 in combinations(selected_lists, 2):
+        current_comparison += 1
+        print(f"\nComparando {list1} ↔ {list2} ({current_comparison}/{total_comparisons})...")
+        
+        names1 = names_dict[list1]['first_last']
+        orig1 = names_dict[list1]['original']
+        names2 = names_dict[list2]['first_last']
+        orig2 = names_dict[list2]['original']
+        
+        for i, name1 in enumerate(names1):
+            best_score = 0
+            best_match_idx = -1
+            
+            for j, name2 in enumerate(names2):
+                score = compare_names(name1, name2, similarity_threshold)
+                if score > best_score:
+                    best_score = score
+                    best_match_idx = j
+            
+            if best_score >= similarity_threshold:
+                original_name1 = orig1[i]
+                original_name2 = orig2[best_match_idx]
+                
+                for norm_name, lst, orig in [
+                    (f"{name1[0]} {name1[1]}", list1, original_name1),
+                    (f"{names2[best_match_idx][0]} {names2[best_match_idx][1]}", list2, original_name2)
+                ]:
+                    if lst not in results[norm_name]['lists']:
+                        results[norm_name]['lists'].append(lst)
+                        results[norm_name]['matches'][lst] = orig
+                        results[norm_name]['scores'][lst] = best_score
+
+    final_results = {}
+    for norm_name, data in results.items():
+        if len(data['lists']) >= min_matches:
+            base_name = next(iter(data['matches'].values()))
+            final_results[base_name] = {
+                'lists': data['lists'],
+                'matches': data['matches'],
+                'scores': data['scores'],
+                'normalized': norm_name
+            }
+
+    print(f"\nProcesso finalizado. {len(final_results)} matches encontrados.")
+    return final_results
+
+def save_results_to_excel(results, output_file, selected_lists):
+    if not results:
+        print("Nenhum resultado para salvar.")
+        return
+
+    data = []
+    for base_name, info in results.items():
+        row = {
+            'Nome Base': base_name,
+            'Listas': ', '.join(info['lists']),
+            'Normalizado': info['normalized']
+        }
+        for lst in selected_lists:
+            if lst in info['matches']:
+                row[f'Nome {lst}'] = info['matches'][lst]
+                row[f'Similaridade {lst}'] = info['scores'].get(lst, 'N/A')
+            else:
+                row[f'Nome {lst}'] = 'N/A'
+                row[f'Similaridade {lst}'] = 'N/A'
+        data.append(row)
+    
+    df = pd.DataFrame(data)
+    columns = ['Nome Base', 'Normalizado', 'Listas']
+    for lst in selected_lists:
+        columns.extend([f'Nome {lst}', f'Similaridade {lst}'])
+    
+    df = df[columns]
+
     with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False)
+        df.to_excel(writer, index=False, sheet_name='Resultados')
+        worksheet = writer.sheets['Resultados']
+        
+        for col in df.columns:
+            idx = df.columns.get_loc(col)
+            letter = get_column_letter(idx + 1)
+            max_length = max(df[col].astype(str).map(len).max(), len(col)) + 2
+            worksheet.column_dimensions[letter].width = max_length
+
+    print(f"Arquivo salvo: {output_file}")
+
+def main():
+    available_files = {
+        'A': 'names_a.txt',
+        'B': 'names_b.txt',
+        'C': 'names_c.txt',
+        'D': 'names_D.txt',
+        'E': 'names_E.txt',
+        'F': 'names_F.txt'
+    }
     
-    print(f"Nomes semelhantes salvos em '{output_file}'")
+    print("Arquivos disponíveis:")
+    for k, v in available_files.items():
+        print(f"{k}: {v}")
+
+    selected = input("\nSelecione as listas (ex: AB, ABC): ").upper()
+    while len(selected) < 2 or not all(c in available_files for c in selected):
+        selected = input("Selecione pelo menos 2 listas válidas: ").upper()
+    
+    selected_lists = list(selected)
+    max_matches = len(selected_lists)
+    
+    similarity = int(input(f"\nLimiar de similaridade (1-100) [85]: ") or 85)
+    min_matches = int(input(f"Matches mínimos (2-{max_matches}) [2]: ") or 2)
+    
+    names_data = load_names(available_files)
+    matches = find_flexible_matches(
+        names_data,
+        selected_lists,
+        similarity_threshold=similarity,
+        min_matches=min_matches
+    )
+    
+    output_file = input("\nNome do arquivo de saída [resultados.xlsx]: ") or "resultados.xlsx"
+    save_results_to_excel(matches, output_file, selected_lists)
 
 if __name__ == "__main__":
-    # Caminhos para os arquivos de texto
-    file_path_a = 'names_a.txt'
-    file_path_b = 'names_b.txt'
-    
-    # Comparando os nomes nos arquivos
-    similar_names = compare_similar_names(file_path_a, file_path_b, similarity_threshold=85)
-    
-    # Salvando os resultados em um arquivo Excel
-    save_similar_names_to_excel(similar_names, 'similar_names.xlsx')
+    main()
