@@ -10,8 +10,7 @@ This document describes Python scripts included in a repository aimed at cleanin
 - distintctmei.py: Compares lists to identify different or missing names.
 
 🔧 Requirements
-Python 3.8+ and the following libraries: pandas, openpyxl, rapidfuzz
-Suggested requirements.txt:
+Python 3.8+ and the following libraries:
 - pandas
 - openpyxl
 - rapidfuzz
